@@ -1,36 +1,38 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
-import { DatabaseService } from './database/database.service';
+import { FeatureManager, ConfigManager } from '@concrete-plant/core';
 
 @Controller()
 export class AppController {
-  constructor(
-    private readonly appService: AppService,
-    private readonly databaseService: DatabaseService,
-  ) {}
-
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
-  }
+  constructor(private readonly appService: AppService) {}
 
   @Get('health')
-  async getHealth() {
-    const dbHealth = await this.databaseService.healthCheck();
-    const dbStats = await this.databaseService.getDatabaseStats();
-    
-    return {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      service: 'concrete-plant-api',
-      version: '1.0.0',
-      database: dbHealth,
-      statistics: dbStats,
-    };
+  getHealth() {
+    return this.appService.getHealth();
   }
 
   @Get('api/health')
-  async getApiHealth() {
-    return this.getHealth();
+  getApiHealth() {
+    return this.appService.getHealth();
+  }
+
+  @Get('api/config/runtime')
+  getRuntimeConfig() {
+    const config = ConfigManager.getConfig();
+    const features = FeatureManager.getAll();
+    
+    return {
+      mode: config.mode,
+      features: features,
+      database: config.database.type,
+      plc: {
+        enabled: config.plc?.enabled || false,
+        host: config.plc?.host,
+      },
+      cloudSync: {
+        enabled: config.cloudSync?.enabled || false,
+        apiUrl: config.cloudSync?.apiUrl,
+      },
+    };
   }
 }

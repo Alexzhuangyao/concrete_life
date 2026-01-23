@@ -1,0 +1,18 @@
+{
+  "name": "@concrete-plant/core",
+  "version": "1.0.0",
+  "description": "混凝土搅拌站管理系统 - 核心包",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["concrete", "plant", "management"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

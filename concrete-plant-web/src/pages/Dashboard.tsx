@@ -6,6 +6,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../components/layout';
+import { ConfigStatusBanner } from '../components/common';
 
 // Mock data for dashboard
 const currentTask = {
@@ -57,6 +58,9 @@ const Dashboard: React.FC = () => {
   return (
     <AppLayout selectedKey="dashboard">
       <div style={{ padding: 16 }}>
+        {/* 配置状态横幅 */}
+        <ConfigStatusBanner />
+        
         {/* Current Task Info */}
         <div 
           style={{ 

@@ -24,7 +24,10 @@
 
 ### 1.1 站点管理 (sites)
 - [x] 站点基本信息表
-  - id, name, code, address, status, manager, phone, created_at, updated_at
+  - **基本信息**: id, name, code, address, status, manager, phone
+  - **PLC设备信息**: plc_enabled, plc_ip, plc_port, plc_protocol
+  - **时间戳**: created_at, updated_at
+  - **说明**: 简化设计，仅保留站点基本信息和PLC配置，移除了云边协同相关字段
 
 ### 1.2 用户管理 (users)
 - [x] 用户表（合并用户/员工/司机）
@@ -39,14 +42,13 @@
 
 ### 2.1 设备管理 (equipment)
 - [x] 设备基本信息表（包含车辆、搅拌机、输送带等所有设备）
-  - id, name, equipment_type, model, location, capacity, brand, year, plate_number, status, install_date, purchase_date, last_maintenance_date, next_maintenance_date, health_score, site_id, created_at, updated_at
+  - id, name, equipment_type, model, location, capacity, brand, year, plate_number, status, install_date, purchase_date, health_score, site_id, created_at, updated_at
   - equipment_type: 'vehicle', 'mixer', 'conveyor', 'silo', 'scale', 'pump' 等
+  - status: 'normal', 'warning', 'critical', 'offline'
 - [x] 设备指标表 (equipment_metrics)
   - id, equipment_id, current_value, vibration_value, temperature_value, start_stop_count, total_running_hours, daily_running_hours, recorded_at
 - [x] 设备配件表 (equipment_parts)
   - id, equipment_id, name, type, lifespan, used_hours, remaining_percent, status, last_replace_date, created_at, updated_at
-- [x] 设备维护记录表 (equipment_maintenance)
-  - id, equipment_id, maintenance_type, description, cost, maintenance_date, operator_id, site_id, created_at
 
 ### 2.2 设备分配关系 (equipment_assignments)
 - [x] 设备分配表（如司机-车辆分配）

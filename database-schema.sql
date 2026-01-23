@@ -12,11 +12,20 @@ CREATE TABLE sites (
     name VARCHAR(100) NOT NULL COMMENT '站点名称',
     code VARCHAR(20) NOT NULL UNIQUE COMMENT '站点编码，唯一标识',
     address TEXT COMMENT '站点详细地址',
+    
+    -- 基本信息
     status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active' COMMENT '站点状态：active-运营中，inactive-已停用，maintenance-维护中',
     manager VARCHAR(50) COMMENT '站点负责人姓名',
     phone VARCHAR(20) COMMENT '联系电话',
+    -- 设备信息
+    plc_enabled BOOLEAN DEFAULT FALSE COMMENT '是否启用PLC通信',
+    plc_ip VARCHAR(45) COMMENT 'PLC设备IP地址',
+    plc_port INT DEFAULT 502 COMMENT 'PLC通信端口',
+    plc_protocol VARCHAR(20) DEFAULT 'modbus' COMMENT 'PLC通信协议（modbus、opcua等）',
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    
     INDEX idx_status (status),
     INDEX idx_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='站点基本信息表';
@@ -92,11 +101,9 @@ CREATE TABLE equipment (
     brand VARCHAR(50) COMMENT '品牌',
     year YEAR COMMENT '生产年份',
     plate_number VARCHAR(20) COMMENT '车牌号（仅车辆类型）',
-    status ENUM('normal', 'warning', 'critical', 'maintenance', 'offline') DEFAULT 'normal' COMMENT '设备状态：normal-正常，warning-警告，critical-严重，maintenance-维护中，offline-离线',
+    status ENUM('normal', 'warning', 'critical', 'offline') DEFAULT 'normal' COMMENT '设备状态：normal-正常，warning-警告，critical-严重，offline-离线',
     install_date DATE COMMENT '安装日期',
     purchase_date DATE COMMENT '采购日期',
-    last_maintenance_date DATE COMMENT '上次维护日期',
-    next_maintenance_date DATE COMMENT '下次维护日期',
     health_score TINYINT DEFAULT 100 COMMENT '健康度评分（0-100）',
     site_id BIGINT NOT NULL COMMENT '所属站点ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -142,26 +149,7 @@ CREATE TABLE equipment_parts (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备配件耗材表';
 
--- 2.4 设备维护记录表
-CREATE TABLE equipment_maintenance (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '维护记录ID，主键',
-    equipment_id BIGINT NOT NULL COMMENT '设备ID',
-    maintenance_type ENUM('routine', 'repair', 'upgrade', 'inspection') NOT NULL COMMENT '维护类型：routine-例行维护，repair-故障维修，upgrade-升级改造，inspection-检查',
-    description TEXT COMMENT '维护描述',
-    cost DECIMAL(10,2) COMMENT '维护费用',
-    maintenance_date DATE NOT NULL COMMENT '维护日期',
-    operator_id BIGINT COMMENT '维护操作员ID',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_equipment_id (equipment_id),
-    INDEX idx_maintenance_date (maintenance_date),
-    INDEX idx_operator_id (operator_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备维护记录表';
-
--- 2.5 设备分配关系表
+-- 2.4 设备分配关系表
 CREATE TABLE equipment_assignments (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '分配记录ID，主键',
     equipment_id BIGINT NOT NULL COMMENT '设备ID',
@@ -177,7 +165,7 @@ CREATE TABLE equipment_assignments (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备分配关系表';
 
--- 2.6 排队管理表
+-- 2.5 排队管理表
 CREATE TABLE queue (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '排队记录ID，主键',
     equipment_id BIGINT NOT NULL COMMENT '车辆设备ID',
@@ -808,10 +796,10 @@ CREATE TABLE equipment_daily_stats (
 -- ============================================================================
 
 -- 插入默认站点
-INSERT INTO sites (name, code, address, status, manager, phone) VALUES
-('杭州总站', 'HZ001', '浙江省杭州市余杭区良渚街道', 'active', '张三', '13800138001'),
-('宁波分站', 'NB001', '浙江省宁波市鄞州区', 'active', '李四', '13800138002'),
-('温州分站', 'WZ001', '浙江省温州市龙湾区', 'active', '王五', '13800138003');
+INSERT INTO sites (name, code, address, status, manager, phone, plc_enabled, plc_ip, plc_port, plc_protocol) VALUES
+('杭州总站', 'HZ001', '浙江省杭州市余杭区良渚街道', 'active', '张三', '13800138001', TRUE, '192.168.1.10', 502, 'modbus'),
+('宁波分站', 'NB001', '浙江省宁波市鄞州区', 'active', '李四', '13800138002', TRUE, '192.168.2.10', 502, 'modbus'),
+('温州分站', 'WZ001', '浙江省温州市龙湾区', 'active', '王五', '13800138003', FALSE, NULL, 502, 'modbus');
 
 -- 插入默认角色
 INSERT INTO roles (name, description, permissions) VALUES

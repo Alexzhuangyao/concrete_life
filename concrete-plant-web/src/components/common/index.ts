@@ -12,3 +12,7 @@ export {
   LazyWrapper,
   createLazyComponent,
 } from './LazyLoad';
+
+export { DeploymentModeBadge } from './DeploymentModeBadge';
+export { DevModeConfigSwitcher } from './DevModeConfigSwitcher';
+export { ConfigStatusBanner } from './ConfigStatusBanner';

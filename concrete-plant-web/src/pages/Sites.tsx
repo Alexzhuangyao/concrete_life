@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { AppLayout } from '../components/layout';
+import { ConfigStatusBanner } from '../components/common';
 import { useSiteStore } from '../stores/siteStore';
 import type { Site } from '../stores/siteStore';
 
@@ -305,6 +306,9 @@ const Sites: React.FC = () => {
   return (
     <AppLayout selectedKey="sites">
       <div style={{ padding: 0 }}>
+        {/* 配置状态横幅 */}
+        <ConfigStatusBanner />
+        
         {/* 统计卡片 */}
         <Row gutter={16} style={{ marginBottom: 16 }}>
           <Col span={6}>

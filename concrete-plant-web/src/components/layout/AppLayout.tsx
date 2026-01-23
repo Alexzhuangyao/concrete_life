@@ -32,6 +32,7 @@ import {
 import { useResponsive, useFullscreen } from '../../hooks/useResponsive';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSiteStore } from '../../stores/siteStore';
+import { DeploymentModeBadge } from '../common/DeploymentModeBadge';
 
 const { Header, Sider, Content } = Layout;
 
@@ -331,23 +332,27 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            gap: 8,
             borderBottom: '1px solid var(--border-color)',
-            padding: effectiveCollapsed ? '0 8px' : '0 16px',
+            padding: effectiveCollapsed ? '0 8px' : '0 12px',
           }}
         >
           {effectiveCollapsed ? (
             <span style={{ fontSize: isHD ? 24 : 20, color: 'var(--text-accent)' }}>🏭</span>
           ) : (
-            <span
-              style={{
-                fontSize: isHD ? 16 : 14,
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              混凝土管控平台
-            </span>
+            <>
+              <span
+                style={{
+                  fontSize: isHD ? 16 : 14,
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                混凝土管控平台
+              </span>
+              <DeploymentModeBadge compact />
+            </>
           )}
         </div>
 

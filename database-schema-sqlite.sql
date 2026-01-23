@@ -15,9 +15,18 @@ CREATE TABLE sites (
     name TEXT NOT NULL, -- 站点名称
     code TEXT NOT NULL UNIQUE, -- 站点编码，唯一标识
     address TEXT, -- 站点详细地址
+    
+    -- 基本信息
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'maintenance')), -- 站点状态：active-运营中，inactive-已停用，maintenance-维护中
     manager TEXT, -- 站点负责人姓名
     phone TEXT, -- 联系电话
+    
+    -- 设备信息
+    plc_enabled INTEGER DEFAULT 0, -- 是否启用PLC通信 (0=false, 1=true)
+    plc_ip TEXT, -- PLC设备IP地址
+    plc_port INTEGER DEFAULT 502, -- PLC通信端口
+    plc_protocol TEXT DEFAULT 'modbus', -- PLC通信协议（modbus、opcua等）
+    
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 更新时间
 );
@@ -104,11 +113,9 @@ CREATE TABLE equipment (
     brand TEXT, -- 品牌
     year INTEGER, -- 生产年份
     plate_number TEXT, -- 车牌号（仅车辆类型）
-    status TEXT DEFAULT 'normal' CHECK (status IN ('normal', 'warning', 'critical', 'maintenance', 'offline')), -- 设备状态：normal-正常，warning-警告，critical-严重，maintenance-维护中，offline-离线
+    status TEXT DEFAULT 'normal' CHECK (status IN ('normal', 'warning', 'critical', 'offline')), -- 设备状态：normal-正常，warning-警告，critical-严重，offline-离线
     install_date DATE, -- 安装日期
     purchase_date DATE, -- 采购日期
-    last_maintenance_date DATE, -- 上次维护日期
-    next_maintenance_date DATE, -- 下次维护日期
     health_score INTEGER DEFAULT 100, -- 健康度评分（0-100）
     site_id INTEGER NOT NULL, -- 所属站点ID
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
@@ -161,28 +168,7 @@ CREATE TABLE equipment_parts (
 CREATE INDEX idx_equipment_parts_equipment_id ON equipment_parts(equipment_id);
 CREATE INDEX idx_equipment_parts_status ON equipment_parts(status);
 
--- 2.4 设备维护记录表
-CREATE TABLE equipment_maintenance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 维护记录ID，主键
-    equipment_id INTEGER NOT NULL, -- 设备ID
-    maintenance_type TEXT NOT NULL CHECK (maintenance_type IN ('routine', 'repair', 'upgrade', 'inspection')), -- 维护类型：routine-例行维护，repair-故障维修，upgrade-升级改造，inspection-检查
-    description TEXT, -- 维护描述
-    cost REAL, -- 维护费用
-    maintenance_date DATE NOT NULL, -- 维护日期
-    operator_id INTEGER, -- 维护操作员ID
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_equipment_maintenance_equipment_id ON equipment_maintenance(equipment_id);
-CREATE INDEX idx_equipment_maintenance_date ON equipment_maintenance(maintenance_date);
-CREATE INDEX idx_equipment_maintenance_operator_id ON equipment_maintenance(operator_id);
-
--- 2.5 设备分配关系表
+-- 2.4 设备分配关系表
 CREATE TABLE equipment_assignments (
     id INTEGER PRIMARY KEY AUTOINCREMENT, -- 分配记录ID，主键
     equipment_id INTEGER NOT NULL, -- 设备ID
@@ -200,7 +186,7 @@ CREATE INDEX idx_equipment_assignments_equipment_id ON equipment_assignments(equ
 CREATE INDEX idx_equipment_assignments_user_id ON equipment_assignments(user_id);
 CREATE INDEX idx_equipment_assignments_status ON equipment_assignments(status);
 
--- 2.6 排队管理表
+-- 2.5 排队管理表
 CREATE TABLE queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT, -- 排队记录ID，主键
     equipment_id INTEGER NOT NULL, -- 车辆设备ID
@@ -895,10 +881,10 @@ CREATE INDEX idx_equipment_daily_stats_site_id ON equipment_daily_stats(site_id)
 -- ============================================================================
 
 -- 插入默认站点
-INSERT INTO sites (name, code, address, status, manager, phone) VALUES
-('杭州总站', 'HZ001', '浙江省杭州市余杭区良渚街道', 'active', '张三', '13800138001'),
-('宁波分站', 'NB001', '浙江省宁波市鄞州区', 'active', '李四', '13800138002'),
-('温州分站', 'WZ001', '浙江省温州市龙湾区', 'active', '王五', '13800138003');
+INSERT INTO sites (name, code, address, status, manager, phone, plc_enabled, plc_ip, plc_port, plc_protocol) VALUES
+('杭州总站', 'HZ001', '浙江省杭州市余杭区良渚街道', 'active', '张三', '13800138001', 1, '192.168.1.10', 502, 'modbus'),
+('宁波分站', 'NB001', '浙江省宁波市鄞州区', 'active', '李四', '13800138002', 1, '192.168.2.10', 502, 'modbus'),
+('温州分站', 'WZ001', '浙江省温州市龙湾区', 'active', '王五', '13800138003', 0, NULL, 502, 'modbus');
 
 -- 插入默认角色
 INSERT INTO roles (name, description, permissions) VALUES
