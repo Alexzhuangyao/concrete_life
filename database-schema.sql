@@ -46,17 +46,20 @@ CREATE TABLE users (
     license_type VARCHAR(10) COMMENT '驾驶证类型，如A2、B2等',
     license_expiry DATE COMMENT '驾驶证有效期',
     status ENUM('active', 'inactive', 'leave') DEFAULT 'active' COMMENT '用户状态：active-在职，inactive-离职，leave-请假',
+    role_id BIGINT COMMENT '角色ID',
     join_date DATE COMMENT '入职日期',
     avatar VARCHAR(255) COMMENT '头像文件路径',
     site_id BIGINT NOT NULL COMMENT '所属站点ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL,
     INDEX idx_username (username),
     INDEX idx_user_type (user_type),
     INDEX idx_status (status),
     INDEX idx_site_id (site_id),
-    INDEX idx_employee_no (employee_no)
+    INDEX idx_employee_no (employee_no),
+    INDEX idx_role_id (role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户信息表（包含员工和司机）';
 
 -- 1.3 角色表
@@ -69,22 +72,6 @@ CREATE TABLE roles (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='角色权限表';
-
--- 1.4 用户角色关联表
-CREATE TABLE user_roles (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '关联ID，主键',
-    user_id BIGINT NOT NULL COMMENT '用户ID',
-    role_id BIGINT NOT NULL COMMENT '角色ID',
-    site_id BIGINT NOT NULL COMMENT '站点ID，用户在特定站点的角色',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '分配时间',
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_user_role_site (user_id, role_id, site_id),
-    INDEX idx_user_id (user_id),
-    INDEX idx_role_id (role_id),
-    INDEX idx_site_id (site_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户角色关联表';
 
 -- ============================================================================
 -- 2. 设备管理模块（包含车辆）
@@ -101,6 +88,7 @@ CREATE TABLE equipment (
     brand VARCHAR(50) COMMENT '品牌',
     year YEAR COMMENT '生产年份',
     plate_number VARCHAR(20) COMMENT '车牌号（仅车辆类型）',
+    responsible_user_id BIGINT COMMENT '负责人用户ID',
     status ENUM('normal', 'warning', 'critical', 'offline') DEFAULT 'normal' COMMENT '设备状态：normal-正常，warning-警告，critical-严重，offline-离线',
     install_date DATE COMMENT '安装日期',
     purchase_date DATE COMMENT '采购日期',
@@ -109,10 +97,12 @@ CREATE TABLE equipment (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (responsible_user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_equipment_type (equipment_type),
     INDEX idx_status (status),
     INDEX idx_site_id (site_id),
-    INDEX idx_plate_number (plate_number)
+    INDEX idx_plate_number (plate_number),
+    INDEX idx_responsible_user_id (responsible_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备基本信息表（包含车辆）';
 
 -- 2.2 设备指标表
@@ -130,63 +120,6 @@ CREATE TABLE equipment_metrics (
     INDEX idx_equipment_id (equipment_id),
     INDEX idx_recorded_at (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备运行指标表';
-
--- 2.3 设备配件表
-CREATE TABLE equipment_parts (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '配件ID，主键',
-    equipment_id BIGINT NOT NULL COMMENT '所属设备ID',
-    name VARCHAR(100) NOT NULL COMMENT '配件名称',
-    type ENUM('part', 'consumable') NOT NULL COMMENT '配件类型：part-配件，consumable-耗材',
-    lifespan INT NOT NULL COMMENT '预期寿命（小时）',
-    used_hours INT DEFAULT 0 COMMENT '已使用小时数',
-    remaining_percent DECIMAL(5,2) DEFAULT 100 COMMENT '剩余寿命百分比',
-    status ENUM('good', 'warning', 'replace') DEFAULT 'good' COMMENT '配件状态：good-良好，warning-需关注，replace-需更换',
-    last_replace_date DATE COMMENT '上次更换日期',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    INDEX idx_equipment_id (equipment_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备配件耗材表';
-
--- 2.4 设备分配关系表
-CREATE TABLE equipment_assignments (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '分配记录ID，主键',
-    equipment_id BIGINT NOT NULL COMMENT '设备ID',
-    user_id BIGINT NOT NULL COMMENT '用户ID（如司机）',
-    assigned_date DATE NOT NULL COMMENT '分配日期',
-    unassigned_date DATE COMMENT '取消分配日期',
-    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '分配状态：active-有效，inactive-已取消',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_equipment_id (equipment_id),
-    INDEX idx_user_id (user_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备分配关系表';
-
--- 2.5 排队管理表
-CREATE TABLE queue (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '排队记录ID，主键',
-    equipment_id BIGINT NOT NULL COMMENT '车辆设备ID',
-    driver_id BIGINT NOT NULL COMMENT '司机用户ID',
-    task_id BIGINT COMMENT '关联任务ID',
-    queue_number INT NOT NULL COMMENT '排队号码',
-    arrival_time TIMESTAMP COMMENT '到达时间',
-    start_loading_time TIMESTAMP COMMENT '开始装车时间',
-    finish_loading_time TIMESTAMP COMMENT '装车完成时间',
-    departure_time TIMESTAMP COMMENT '离场时间',
-    status ENUM('waiting', 'loading', 'completed', 'cancelled') DEFAULT 'waiting' COMMENT '排队状态：waiting-等待中，loading-装车中，completed-已完成，cancelled-已取消',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_equipment_id (equipment_id),
-    INDEX idx_driver_id (driver_id),
-    INDEX idx_status (status),
-    INDEX idx_queue_number (queue_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='车辆排队管理表';
 
 -- ============================================================================
 -- 3. 订单任务管理模块
@@ -257,36 +190,6 @@ CREATE TABLE tasks (
     INDEX idx_equipment_id (equipment_id),
     INDEX idx_driver_id (driver_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务派单表';
-
--- 3.4 远端配置表
-CREATE TABLE remote_configs (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '配置ID，主键',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    enabled BOOLEAN DEFAULT FALSE COMMENT '是否启用远端同步',
-    url VARCHAR(255) NOT NULL COMMENT '远端API地址',
-    api_key VARCHAR(255) COMMENT 'API密钥',
-    sync_interval INT DEFAULT 5 COMMENT '同步间隔（分钟）',
-    last_sync_time TIMESTAMP COMMENT '上次同步时间',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_site_id (site_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='远端订单同步配置表';
-
--- 3.5 远端订单日志表
-CREATE TABLE remote_order_logs (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '日志ID，主键',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    sync_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '同步时间',
-    orders_count INT DEFAULT 0 COMMENT '同步订单总数',
-    success_count INT DEFAULT 0 COMMENT '成功同步数量',
-    error_count INT DEFAULT 0 COMMENT '失败数量',
-    error_message TEXT COMMENT '错误信息',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_site_id (site_id),
-    INDEX idx_sync_time (sync_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='远端订单同步日志表';
 
 -- ============================================================================
 -- 4. 混凝土/物料管理模块
@@ -486,118 +389,7 @@ CREATE TABLE production_components (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='生产控制布局表';
 
 -- ============================================================================
--- 6. 质量追溯与计费模块
--- ============================================================================
-
--- 6.1 质量检测记录表
-CREATE TABLE quality_tests (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '检测记录ID，主键',
-    batch_id BIGINT NOT NULL COMMENT '生产批次ID',
-    test_type ENUM('slump', 'strength', 'temperature', 'air_content') NOT NULL COMMENT '检测类型：slump-坍落度，strength-强度，temperature-温度，air_content-含气量',
-    test_value DECIMAL(10,2) NOT NULL COMMENT '检测值',
-    standard_value DECIMAL(10,2) COMMENT '标准值',
-    status ENUM('pass', 'fail', 'warning') DEFAULT 'pass' COMMENT '检测结果：pass-合格，fail-不合格，warning-警告',
-    test_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '检测时间',
-    operator_id BIGINT COMMENT '检测员ID',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_batch_id (batch_id),
-    INDEX idx_test_type (test_type),
-    INDEX idx_status (status),
-    INDEX idx_test_time (test_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='质量检测记录表';
-
--- 6.2 坍落度检测表
-CREATE TABLE slump_tests (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '坍落度检测ID，主键',
-    batch_id BIGINT NOT NULL COMMENT '生产批次ID',
-    target_slump DECIMAL(5,1) NOT NULL COMMENT '目标坍落度（mm）',
-    actual_slump DECIMAL(5,1) NOT NULL COMMENT '实际坍落度（mm）',
-    deviation DECIMAL(5,1) COMMENT '偏差值（mm）',
-    status ENUM('pass', 'fail', 'warning') DEFAULT 'pass' COMMENT '检测结果',
-    test_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '检测时间',
-    operator_id BIGINT COMMENT '检测员ID',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_batch_id (batch_id),
-    INDEX idx_status (status),
-    INDEX idx_test_time (test_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='坍落度检测表';
-
--- 6.3 强度检测表
-CREATE TABLE strength_tests (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '强度检测ID，主键',
-    batch_id BIGINT NOT NULL COMMENT '生产批次ID',
-    test_age TINYINT NOT NULL COMMENT '检测龄期（天）',
-    target_strength DECIMAL(5,1) NOT NULL COMMENT '目标强度（MPa）',
-    actual_strength DECIMAL(5,1) COMMENT '实际强度（MPa）',
-    status ENUM('pass', 'fail', 'pending') DEFAULT 'pending' COMMENT '检测结果：pending-待检测',
-    test_time TIMESTAMP COMMENT '检测时间',
-    operator_id BIGINT COMMENT '检测员ID',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_batch_id (batch_id),
-    INDEX idx_test_age (test_age),
-    INDEX idx_status (status),
-    INDEX idx_test_time (test_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='强度检测表';
-
--- 6.4 计费记录表
-CREATE TABLE billing_records (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '计费记录ID，主键',
-    order_id BIGINT NOT NULL COMMENT '订单ID',
-    customer_name VARCHAR(100) NOT NULL COMMENT '客户名称',
-    concrete_grade VARCHAR(20) NOT NULL COMMENT '混凝土等级',
-    total_volume DECIMAL(10,2) NOT NULL COMMENT '总方量（立方米）',
-    unit_price DECIMAL(10,2) NOT NULL COMMENT '单价（元/立方米）',
-    total_amount DECIMAL(12,2) NOT NULL COMMENT '总金额（元）',
-    delivery_count INT DEFAULT 1 COMMENT '配送次数',
-    delivery_date DATE NOT NULL COMMENT '配送日期',
-    status ENUM('pending', 'confirmed', 'invoiced', 'paid') DEFAULT 'pending' COMMENT '计费状态：pending-待确认，confirmed-已确认，invoiced-已开票，paid-已付款',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_order_id (order_id),
-    INDEX idx_customer_name (customer_name),
-    INDEX idx_status (status),
-    INDEX idx_delivery_date (delivery_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计费记录表';
-
--- 6.5 对账记录表
-CREATE TABLE reconciliation_records (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '对账记录ID，主键',
-    month VARCHAR(7) NOT NULL COMMENT '对账月份（YYYY-MM格式）',
-    customer_name VARCHAR(100) NOT NULL COMMENT '客户名称',
-    order_count INT DEFAULT 0 COMMENT '订单数量',
-    total_volume DECIMAL(12,2) DEFAULT 0 COMMENT '总方量（立方米）',
-    total_amount DECIMAL(15,2) DEFAULT 0 COMMENT '应收金额（元）',
-    confirmed_amount DECIMAL(15,2) DEFAULT 0 COMMENT '确认金额（元）',
-    difference DECIMAL(15,2) DEFAULT 0 COMMENT '差额（元）',
-    status ENUM('pending', 'confirmed', 'disputed') DEFAULT 'pending' COMMENT '对账状态：pending-待确认，confirmed-已确认，disputed-有争议',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    INDEX idx_month (month),
-    INDEX idx_customer_name (customer_name),
-    INDEX idx_status (status),
-    INDEX idx_site_id (site_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对账记录表';
-
--- ============================================================================
--- 7. 日志与告警模块
+-- 6. 日志与告警模块
 -- ============================================================================
 
 -- 7.1 操作日志表
@@ -773,24 +565,6 @@ CREATE TABLE monthly_production_stats (
     INDEX idx_year_month (year_month)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='月生产统计表';
 
--- 9.3 设备运行统计表
-CREATE TABLE equipment_daily_stats (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '统计ID，主键',
-    equipment_id BIGINT NOT NULL COMMENT '设备ID',
-    stat_date DATE NOT NULL COMMENT '统计日期',
-    running_hours DECIMAL(8,2) DEFAULT 0 COMMENT '运行小时数',
-    start_stop_count INT DEFAULT 0 COMMENT '启停次数',
-    efficiency DECIMAL(5,2) DEFAULT 0 COMMENT '运行效率百分比',
-    maintenance_cost DECIMAL(10,2) DEFAULT 0 COMMENT '维护费用（元）',
-    site_id BIGINT NOT NULL COMMENT '站点ID',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_equipment_date (equipment_id, stat_date),
-    INDEX idx_stat_date (stat_date),
-    INDEX idx_site_id (site_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备日运行统计表';
-
 -- ============================================================================
 -- 初始化数据
 -- ============================================================================
@@ -805,9 +579,9 @@ INSERT INTO sites (name, code, address, status, manager, phone, plc_enabled, plc
 INSERT INTO roles (name, description, permissions) VALUES
 ('超级管理员', '系统超级管理员，拥有所有权限', '["*"]'),
 ('站点管理员', '站点管理员，管理单个站点的所有业务', '["site.*"]'),
-('生产操作员', '生产操作员，负责生产控制和质量检测', '["production.*", "quality.*"]'),
-('调度员', '调度员，负责订单和任务管理', '["order.*", "task.*", "queue.*"]'),
-('司机', '司机，查看自己的任务和排队信息', '["task.view", "queue.view"]');
+('生产操作员', '生产操作员，负责生产控制和质量检测', '["production.*"]'),
+('调度员', '调度员，负责订单和任务管理', '["order.*", "task.*"]'),
+('司机', '司机，查看自己的任务信息', '["task.view"]');
 
 -- 插入默认管理员用户
 INSERT INTO users (username, password_hash, email, phone, name, user_type, status, site_id) VALUES
@@ -832,6 +606,7 @@ INSERT INTO dictionaries (category, code, name, value, sort_order, description) 
 
 -- 创建索引优化查询性能
 CREATE INDEX idx_users_site_type ON users(site_id, user_type);
+CREATE INDEX idx_users_site_role ON users(site_id, role_id);
 CREATE INDEX idx_equipment_site_type ON equipment(site_id, equipment_type);
 CREATE INDEX idx_orders_site_status ON orders(site_id, status);
 CREATE INDEX idx_tasks_site_status ON tasks(site_id, status);

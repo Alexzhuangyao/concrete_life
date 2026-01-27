@@ -51,12 +51,14 @@ CREATE TABLE users (
     license_type TEXT, -- 驾驶证类型，如A2、B2等
     license_expiry DATE, -- 驾驶证有效期
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'leave')), -- 用户状态：active-在职，inactive-离职，leave-请假
+    role_id INTEGER, -- 角色ID
     join_date DATE, -- 入职日期
     avatar TEXT, -- 头像文件路径
     site_id INTEGER NOT NULL, -- 所属站点ID
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 );
 
 -- 创建索引
@@ -65,7 +67,9 @@ CREATE INDEX idx_users_user_type ON users(user_type);
 CREATE INDEX idx_users_status ON users(status);
 CREATE INDEX idx_users_site_id ON users(site_id);
 CREATE INDEX idx_users_employee_no ON users(employee_no);
+CREATE INDEX idx_users_role_id ON users(role_id);
 CREATE INDEX idx_users_site_type ON users(site_id, user_type);
+CREATE INDEX idx_users_site_role ON users(site_id, role_id);
 
 -- 1.3 角色表
 CREATE TABLE roles (
@@ -79,24 +83,6 @@ CREATE TABLE roles (
 
 -- 创建索引
 CREATE INDEX idx_roles_name ON roles(name);
-
--- 1.4 用户角色关联表
-CREATE TABLE user_roles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 关联ID，主键
-    user_id INTEGER NOT NULL, -- 用户ID
-    role_id INTEGER NOT NULL, -- 角色ID
-    site_id INTEGER NOT NULL, -- 站点ID，用户在特定站点的角色
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 分配时间
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    UNIQUE(user_id, role_id, site_id)
-);
-
--- 创建索引
-CREATE INDEX idx_user_roles_user_id ON user_roles(user_id);
-CREATE INDEX idx_user_roles_role_id ON user_roles(role_id);
-CREATE INDEX idx_user_roles_site_id ON user_roles(site_id);
 
 -- ============================================================================
 -- 2. 设备管理模块（包含车辆）
@@ -113,6 +99,7 @@ CREATE TABLE equipment (
     brand TEXT, -- 品牌
     year INTEGER, -- 生产年份
     plate_number TEXT, -- 车牌号（仅车辆类型）
+    responsible_user_id INTEGER, -- 负责人用户ID
     status TEXT DEFAULT 'normal' CHECK (status IN ('normal', 'warning', 'critical', 'offline')), -- 设备状态：normal-正常，warning-警告，critical-严重，offline-离线
     install_date DATE, -- 安装日期
     purchase_date DATE, -- 采购日期
@@ -120,7 +107,8 @@ CREATE TABLE equipment (
     site_id INTEGER NOT NULL, -- 所属站点ID
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (responsible_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- 创建索引
@@ -128,6 +116,7 @@ CREATE INDEX idx_equipment_type ON equipment(equipment_type);
 CREATE INDEX idx_equipment_status ON equipment(status);
 CREATE INDEX idx_equipment_site_id ON equipment(site_id);
 CREATE INDEX idx_equipment_plate_number ON equipment(plate_number);
+CREATE INDEX idx_equipment_responsible_user_id ON equipment(responsible_user_id);
 CREATE INDEX idx_equipment_site_type ON equipment(site_id, equipment_type);
 
 -- 2.2 设备指标表
@@ -147,69 +136,6 @@ CREATE TABLE equipment_metrics (
 -- 创建索引
 CREATE INDEX idx_equipment_metrics_equipment_id ON equipment_metrics(equipment_id);
 CREATE INDEX idx_equipment_metrics_recorded_at ON equipment_metrics(recorded_at);
-
--- 2.3 设备配件表
-CREATE TABLE equipment_parts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 配件ID，主键
-    equipment_id INTEGER NOT NULL, -- 所属设备ID
-    name TEXT NOT NULL, -- 配件名称
-    type TEXT NOT NULL CHECK (type IN ('part', 'consumable')), -- 配件类型：part-配件，consumable-耗材
-    lifespan INTEGER NOT NULL, -- 预期寿命（小时）
-    used_hours INTEGER DEFAULT 0, -- 已使用小时数
-    remaining_percent REAL DEFAULT 100, -- 剩余寿命百分比
-    status TEXT DEFAULT 'good' CHECK (status IN ('good', 'warning', 'replace')), -- 配件状态：good-良好，warning-需关注，replace-需更换
-    last_replace_date DATE, -- 上次更换日期
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_equipment_parts_equipment_id ON equipment_parts(equipment_id);
-CREATE INDEX idx_equipment_parts_status ON equipment_parts(status);
-
--- 2.4 设备分配关系表
-CREATE TABLE equipment_assignments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 分配记录ID，主键
-    equipment_id INTEGER NOT NULL, -- 设备ID
-    user_id INTEGER NOT NULL, -- 用户ID（如司机）
-    assigned_date DATE NOT NULL, -- 分配日期
-    unassigned_date DATE, -- 取消分配日期
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')), -- 分配状态：active-有效，inactive-已取消
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_equipment_assignments_equipment_id ON equipment_assignments(equipment_id);
-CREATE INDEX idx_equipment_assignments_user_id ON equipment_assignments(user_id);
-CREATE INDEX idx_equipment_assignments_status ON equipment_assignments(status);
-
--- 2.5 排队管理表
-CREATE TABLE queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 排队记录ID，主键
-    equipment_id INTEGER NOT NULL, -- 车辆设备ID
-    driver_id INTEGER NOT NULL, -- 司机用户ID
-    task_id INTEGER, -- 关联任务ID
-    queue_number INTEGER NOT NULL, -- 排队号码
-    arrival_time DATETIME, -- 到达时间
-    start_loading_time DATETIME, -- 开始装车时间
-    finish_loading_time DATETIME, -- 装车完成时间
-    departure_time DATETIME, -- 离场时间
-    status TEXT DEFAULT 'waiting' CHECK (status IN ('waiting', 'loading', 'completed', 'cancelled')), -- 排队状态：waiting-等待中，loading-装车中，completed-已完成，cancelled-已取消
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_queue_equipment_id ON queue(equipment_id);
-CREATE INDEX idx_queue_driver_id ON queue(driver_id);
-CREATE INDEX idx_queue_status ON queue(status);
-CREATE INDEX idx_queue_number ON queue(queue_number);
 
 -- ============================================================================
 -- 3. 订单任务管理模块
@@ -287,38 +213,6 @@ CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_equipment_id ON tasks(equipment_id);
 CREATE INDEX idx_tasks_driver_id ON tasks(driver_id);
 CREATE INDEX idx_tasks_site_status ON tasks(site_id, status);
-
--- 3.4 远端配置表
-CREATE TABLE remote_configs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 配置ID，主键
-    site_id INTEGER NOT NULL, -- 站点ID
-    enabled INTEGER DEFAULT 0, -- 是否启用远端同步 (0=false, 1=true)
-    url TEXT NOT NULL, -- 远端API地址
-    api_key TEXT, -- API密钥
-    sync_interval INTEGER DEFAULT 5, -- 同步间隔（分钟）
-    last_sync_time DATETIME, -- 上次同步时间
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    UNIQUE(site_id)
-);
-
--- 3.5 远端订单日志表
-CREATE TABLE remote_order_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 日志ID，主键
-    site_id INTEGER NOT NULL, -- 站点ID
-    sync_time DATETIME DEFAULT CURRENT_TIMESTAMP, -- 同步时间
-    orders_count INTEGER DEFAULT 0, -- 同步订单总数
-    success_count INTEGER DEFAULT 0, -- 成功同步数量
-    error_count INTEGER DEFAULT 0, -- 失败数量
-    error_message TEXT, -- 错误信息
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_remote_order_logs_site_id ON remote_order_logs(site_id);
-CREATE INDEX idx_remote_order_logs_sync_time ON remote_order_logs(sync_time);
 
 -- ============================================================================
 -- 4. 混凝土/物料管理模块
@@ -542,123 +436,6 @@ CREATE INDEX idx_production_components_type ON production_components(component_t
 -- 6. 质量追溯与计费模块
 -- ============================================================================
 
--- 6.1 质量检测记录表
-CREATE TABLE quality_tests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 检测记录ID，主键
-    batch_id INTEGER NOT NULL, -- 生产批次ID
-    test_type TEXT NOT NULL CHECK (test_type IN ('slump', 'strength', 'temperature', 'air_content')), -- 检测类型：slump-坍落度，strength-强度，temperature-温度，air_content-含气量
-    test_value REAL NOT NULL, -- 检测值
-    standard_value REAL, -- 标准值
-    status TEXT DEFAULT 'pass' CHECK (status IN ('pass', 'fail', 'warning')), -- 检测结果：pass-合格，fail-不合格，warning-警告
-    test_time DATETIME DEFAULT CURRENT_TIMESTAMP, -- 检测时间
-    operator_id INTEGER, -- 检测员ID
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_quality_tests_batch_id ON quality_tests(batch_id);
-CREATE INDEX idx_quality_tests_test_type ON quality_tests(test_type);
-CREATE INDEX idx_quality_tests_status ON quality_tests(status);
-CREATE INDEX idx_quality_tests_test_time ON quality_tests(test_time);
-
--- 6.2 坍落度检测表
-CREATE TABLE slump_tests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 坍落度检测ID，主键
-    batch_id INTEGER NOT NULL, -- 生产批次ID
-    target_slump REAL NOT NULL, -- 目标坍落度（mm）
-    actual_slump REAL NOT NULL, -- 实际坍落度（mm）
-    deviation REAL, -- 偏差值（mm）
-    status TEXT DEFAULT 'pass' CHECK (status IN ('pass', 'fail', 'warning')), -- 检测结果
-    test_time DATETIME DEFAULT CURRENT_TIMESTAMP, -- 检测时间
-    operator_id INTEGER, -- 检测员ID
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_slump_tests_batch_id ON slump_tests(batch_id);
-CREATE INDEX idx_slump_tests_status ON slump_tests(status);
-CREATE INDEX idx_slump_tests_test_time ON slump_tests(test_time);
-
--- 6.3 强度检测表
-CREATE TABLE strength_tests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 强度检测ID，主键
-    batch_id INTEGER NOT NULL, -- 生产批次ID
-    test_age INTEGER NOT NULL, -- 检测龄期（天）
-    target_strength REAL NOT NULL, -- 目标强度（MPa）
-    actual_strength REAL, -- 实际强度（MPa）
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pass', 'fail', 'pending')), -- 检测结果：pending-待检测
-    test_time DATETIME, -- 检测时间
-    operator_id INTEGER, -- 检测员ID
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (batch_id) REFERENCES production_batches(id) ON DELETE CASCADE,
-    FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_strength_tests_batch_id ON strength_tests(batch_id);
-CREATE INDEX idx_strength_tests_test_age ON strength_tests(test_age);
-CREATE INDEX idx_strength_tests_status ON strength_tests(status);
-CREATE INDEX idx_strength_tests_test_time ON strength_tests(test_time);
-
--- 6.4 计费记录表
-CREATE TABLE billing_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 计费记录ID，主键
-    order_id INTEGER NOT NULL, -- 订单ID
-    customer_name TEXT NOT NULL, -- 客户名称
-    concrete_grade TEXT NOT NULL, -- 混凝土等级
-    total_volume REAL NOT NULL, -- 总方量（立方米）
-    unit_price REAL NOT NULL, -- 单价（元/立方米）
-    total_amount REAL NOT NULL, -- 总金额（元）
-    delivery_count INTEGER DEFAULT 1, -- 配送次数
-    delivery_date DATE NOT NULL, -- 配送日期
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'invoiced', 'paid')), -- 计费状态：pending-待确认，confirmed-已确认，invoiced-已开票，paid-已付款
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_billing_records_order_id ON billing_records(order_id);
-CREATE INDEX idx_billing_records_customer_name ON billing_records(customer_name);
-CREATE INDEX idx_billing_records_status ON billing_records(status);
-CREATE INDEX idx_billing_records_delivery_date ON billing_records(delivery_date);
-
--- 6.5 对账记录表
-CREATE TABLE reconciliation_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 对账记录ID，主键
-    month TEXT NOT NULL, -- 对账月份（YYYY-MM格式）
-    customer_name TEXT NOT NULL, -- 客户名称
-    order_count INTEGER DEFAULT 0, -- 订单数量
-    total_volume REAL DEFAULT 0, -- 总方量（立方米）
-    total_amount REAL DEFAULT 0, -- 应收金额（元）
-    confirmed_amount REAL DEFAULT 0, -- 确认金额（元）
-    difference REAL DEFAULT 0, -- 差额（元）
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'disputed')), -- 对账状态：pending-待确认，confirmed-已确认，disputed-有争议
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 更新时间
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-);
-
--- 创建索引
-CREATE INDEX idx_reconciliation_records_month ON reconciliation_records(month);
-CREATE INDEX idx_reconciliation_records_customer_name ON reconciliation_records(customer_name);
-CREATE INDEX idx_reconciliation_records_status ON reconciliation_records(status);
-CREATE INDEX idx_reconciliation_records_site_id ON reconciliation_records(site_id);
-
 -- ============================================================================
 -- 7. 日志与告警模块
 -- ============================================================================
@@ -856,26 +633,6 @@ CREATE TABLE monthly_production_stats (
 -- 创建索引
 CREATE INDEX idx_monthly_production_stats_year_month ON monthly_production_stats(year_month);
 
--- 9.3 设备运行统计表
-CREATE TABLE equipment_daily_stats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, -- 统计ID，主键
-    equipment_id INTEGER NOT NULL, -- 设备ID
-    stat_date DATE NOT NULL, -- 统计日期
-    running_hours REAL DEFAULT 0, -- 运行小时数
-    start_stop_count INTEGER DEFAULT 0, -- 启停次数
-    efficiency REAL DEFAULT 0, -- 运行效率百分比
-    maintenance_cost REAL DEFAULT 0, -- 维护费用（元）
-    site_id INTEGER NOT NULL, -- 站点ID
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
-    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-    UNIQUE(equipment_id, stat_date)
-);
-
--- 创建索引
-CREATE INDEX idx_equipment_daily_stats_stat_date ON equipment_daily_stats(stat_date);
-CREATE INDEX idx_equipment_daily_stats_site_id ON equipment_daily_stats(site_id);
-
 -- ============================================================================
 -- 初始化数据
 -- ============================================================================
@@ -890,9 +647,9 @@ INSERT INTO sites (name, code, address, status, manager, phone, plc_enabled, plc
 INSERT INTO roles (name, description, permissions) VALUES
 ('超级管理员', '系统超级管理员，拥有所有权限', '["*"]'),
 ('站点管理员', '站点管理员，管理单个站点的所有业务', '["site.*"]'),
-('生产操作员', '生产操作员，负责生产控制和质量检测', '["production.*", "quality.*"]'),
-('调度员', '调度员，负责订单和任务管理', '["order.*", "task.*", "queue.*"]'),
-('司机', '司机，查看自己的任务和排队信息', '["task.view", "queue.view"]');
+('生产操作员', '生产操作员，负责生产控制和质量检测', '["production.*"]'),
+('调度员', '调度员，负责订单和任务管理', '["order.*", "task.*"]'),
+('司机', '司机，查看自己的任务信息', '["task.view"]');
 
 -- 插入默认管理员用户
 INSERT INTO users (username, password_hash, email, phone, name, user_type, status, site_id) VALUES
@@ -944,13 +701,6 @@ CREATE TRIGGER update_equipment_updated_at
         UPDATE equipment SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 
-CREATE TRIGGER update_equipment_parts_updated_at 
-    AFTER UPDATE ON equipment_parts
-    FOR EACH ROW
-    BEGIN
-        UPDATE equipment_parts SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-    END;
-
 CREATE TRIGGER update_orders_updated_at 
     AFTER UPDATE ON orders
     FOR EACH ROW
@@ -963,13 +713,6 @@ CREATE TRIGGER update_tasks_updated_at
     FOR EACH ROW
     BEGIN
         UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-    END;
-
-CREATE TRIGGER update_remote_configs_updated_at 
-    AFTER UPDATE ON remote_configs
-    FOR EACH ROW
-    BEGIN
-        UPDATE remote_configs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 
 CREATE TRIGGER update_materials_updated_at 
@@ -1019,27 +762,6 @@ CREATE TRIGGER update_production_components_updated_at
     FOR EACH ROW
     BEGIN
         UPDATE production_components SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-    END;
-
-CREATE TRIGGER update_quality_tests_updated_at 
-    AFTER UPDATE ON quality_tests
-    FOR EACH ROW
-    BEGIN
-        UPDATE quality_tests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-    END;
-
-CREATE TRIGGER update_billing_records_updated_at 
-    AFTER UPDATE ON billing_records
-    FOR EACH ROW
-    BEGIN
-        UPDATE billing_records SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-    END;
-
-CREATE TRIGGER update_reconciliation_records_updated_at 
-    AFTER UPDATE ON reconciliation_records
-    FOR EACH ROW
-    BEGIN
-        UPDATE reconciliation_records SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     END;
 
 CREATE TRIGGER update_alarm_rules_updated_at 
