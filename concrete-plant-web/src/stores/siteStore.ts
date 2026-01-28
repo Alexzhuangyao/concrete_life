@@ -97,10 +97,13 @@ export const useSiteStore = create<SiteState>()(
         sites: state.sites.map(s => s.id === id ? { ...s, ...updates } : s)
       })),
       
-      deleteSite: (id: string) => set((state) => ({
-        sites: state.sites.filter(s => s.id !== id),
-        currentSiteId: state.currentSiteId === id ? state.sites[0]?.id || '' : state.currentSiteId
-      })),
+      deleteSite: (id: string) => set((state) => {
+        const newSites = state.sites.filter(s => s.id !== id);
+        return {
+          sites: newSites,
+          currentSiteId: state.currentSiteId === id ? (newSites[0]?.id || '') : state.currentSiteId
+        };
+      }),
       
       getCurrentSite: () => {
         const state = get();
